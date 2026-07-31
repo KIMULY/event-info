@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>イベント情報</title>
+<style>
+  :root{
+    --bg:#f7f7f5;
+    --card:#ffffff;
+    --text:#1a1a1a;
+    --sub:#6b6b6b;
+    --accent:#0f6b4c;
+    --accent-bg:#e6f4ee;
+    --border:#e5e5e2;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#15161a;
+      --card:#1e2025;
+      --text:#f0f0f0;
+      --sub:#9a9a9a;
+      --accent:#4fd1a5;
+      --accent-bg:#1c332a;
+      --border:#2b2d33;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Hiragino Kaku Gothic ProN",sans-serif;
+    -webkit-text-size-adjust:100%;
+  }
+  header{
+    position:sticky;
+    top:0;
+    background:var(--bg);
+    padding:20px 16px 12px;
+    border-bottom:1px solid var(--border);
+    z-index:10;
+  }
+  h1{
+    margin:0 0 4px;
+    font-size:22px;
+    font-weight:700;
+  }
+  .updated{
+    font-size:12px;
+    color:var(--sub);
+  }
+  .search{
+    margin-top:12px;
+  }
+  .search input{
+    width:100%;
+    padding:10px 14px;
+    border-radius:10px;
+    border:1px solid var(--border);
+    background:var(--card);
+    color:var(--text);
+    font-size:15px;
+  }
+  main{
+    max-width:640px;
+    margin:0 auto;
+    padding:16px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:12px;
+  }
+  .card .time{
+    display:inline-block;
+    font-size:12px;
+    font-weight:600;
+    color:var(--accent);
+    background:var(--accent-bg);
+    padding:3px 10px;
+    border-radius:999px;
+    margin-bottom:8px;
+  }
+  .card .content{
+    font-size:15px;
+    line-height:1.7;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .empty, .error{
+    text-align:center;
+    color:var(--sub);
+    padding:40px 16px;
+    font-size:14px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1 id="eventTitle">イベント情報</h1>
+  <div class="updated" id="updatedAt">読み込み中...</div>
+  <div class="search">
+    <input type="text" id="searchBox" placeholder="キーワードで絞り込み">
+  </div>
+</header>
+
+<main>
+  <div id="feed"><div class="empty">読み込み中...</div></div>
+</main>
+
+<script>
+  // ==== 設定 ====
+  const EVENT_TITLE = "イベント情報";
+  const SHEET_ID = "1UQq3BX7jJYW2T7_6EIpFMVI3NbbT5hVvDzPpewNdBIM";
+  const REFRESH_MS = 30000;
+  // ==============
+
+  document.getElementById('eventTitle').textContent = EVENT_TITLE;
+  document.title = EVENT_TITLE;
+
+  const CSV_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv`;
+
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = '', inQuotes = false;
+    for (let i = 0; i < text.length; i++){
+      const c = text[i];
+      if (inQuotes){
+        if (c === '"'){
+          if (text[i+1] === '"'){ field += '"'; i++; }
+          else inQuotes = false;
+        } else field += c;
+      } else {
+        if (c === '"') inQuotes = true;
+        else if (c === ','){ row.push(field); field=''; }
+        else if (c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+        else if (c === '\r'){ /* skip */ }
+        else field += c;
+      }
+    }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    return rows.filter(r => r.some(v => v.trim() !== ''));
+  }
+
+  let allItems = [];
+
+  function render(items){
+    const feed = document.getElementById('feed');
+    if (!items.length){
+      feed.innerHTML = '<div class="empty">まだ情報がありません</div>';
+      return;
+    }
+    feed.innerHTML = items.map(it => `
+      <div class="card">
+        ${it.time ? `<span class="time">${escapeHtml(it.time)}</span>` : ''}
+        <div class="content">${escapeHtml(it.content)}</div>
+      </div>
+    `).join('');
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  async function load(){
+    try {
+      const res = await fetch(CSV_URL + '&_=' + Date.now());
+      if (!res.ok) throw new Error('fetch failed');
+      const text = await res.text();
+      const rows = parseCSV(text);
+      const dataRows = rows.slice(1); // ヘッダー行を除く
+      allItems = dataRows
+        .map(r => ({ time: (r[0]||'').trim(), content: (r[1]||'').trim() }))
+        .filter(it => it.content !== '')
+        .reverse(); // 最新（下の行）を先頭に
+      applyFilter();
+      document.getElementById('updatedAt').textContent =
+        '最終更新: ' + new Date().toLocaleTimeString('ja-JP', {hour:'2-digit', minute:'2-digit'});
+    } catch(e){
+      document.getElementById('feed').innerHTML = '<div class="error">読み込みに失敗しました。時間をおいて再読み込みしてください。</div>';
+    }
+  }
+
+  function applyFilter(){
+    const q = document.getElementById('searchBox').value.trim();
+    if (!q){ render(allItems); return; }
+    render(allItems.filter(it => it.content.includes(q) || it.time.includes(q)));
+  }
+
+  document.getElementById('searchBox').addEventListener('input', applyFilter);
+
+  load();
+  setInterval(load, REFRESH_MS);
+</script>
+
+</body>
+</html>
