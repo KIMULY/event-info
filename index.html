@@ -94,6 +94,12 @@
     color:var(--accent);
     word-break:break-all;
   }
+  .card img{
+    display:block;
+    max-width:100%;
+    border-radius:10px;
+    margin-top:10px;
+  }
   .empty, .error{
     text-align:center;
     color:var(--sub);
@@ -162,6 +168,7 @@
       <div class="card">
         ${it.time ? `<span class="time">${escapeHtml(it.time)}</span>` : ''}
         <div class="content">${linkify(escapeHtml(it.content))}</div>
+        ${it.image ? `<img src="${escapeHtml(toDirectImageUrl(it.image))}" loading="lazy" alt="">` : ''}
       </div>
     `).join('');
   }
@@ -176,6 +183,16 @@
     );
   }
 
+  function toDirectImageUrl(url){
+    if (!url) return '';
+    url = url.trim();
+    let m = url.match(/drive\.google\.com\/file\/d\/([^/]+)/);
+    if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    m = url.match(/drive\.google\.com\/open\?id=([^&]+)/);
+    if (m) return `https://drive.google.com/uc?export=view&id=${m[1]}`;
+    return url;
+  }
+
   async function load(){
     try {
       const res = await fetch(CSV_URL + '&_=' + Date.now());
@@ -184,8 +201,8 @@
       const rows = parseCSV(text);
       const dataRows = rows.slice(1); // ヘッダー行を除く
       allItems = dataRows
-        .map(r => ({ time: (r[0]||'').trim(), content: (r[1]||'').trim() }))
-        .filter(it => it.content !== '')
+        .map(r => ({ time: (r[0]||'').trim(), content: (r[1]||'').trim(), image: (r[2]||'').trim() }))
+        .filter(it => it.content !== '' || it.image !== '')
         .reverse(); // 最新（下の行）を先頭に
       applyFilter();
       document.getElementById('updatedAt').textContent =
