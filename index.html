@@ -90,6 +90,10 @@
     white-space:pre-wrap;
     word-break:break-word;
   }
+  .card .content a{
+    color:var(--accent);
+    word-break:break-all;
+  }
   .empty, .error{
     text-align:center;
     color:var(--sub);
@@ -157,13 +161,19 @@
     feed.innerHTML = items.map(it => `
       <div class="card">
         ${it.time ? `<span class="time">${escapeHtml(it.time)}</span>` : ''}
-        <div class="content">${escapeHtml(it.content)}</div>
+        <div class="content">${linkify(escapeHtml(it.content))}</div>
       </div>
     `).join('');
   }
 
   function escapeHtml(s){
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function linkify(escapedText){
+    return escapedText.replace(/(https?:\/\/[^\s<]+)/g, url =>
+      `<a href="${url}" target="_blank" rel="noopener noreferrer">${url}</a>`
+    );
   }
 
   async function load(){
